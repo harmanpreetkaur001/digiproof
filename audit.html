@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Audit Logs — Evidence Lockbox</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="app-layout">
+  <div class="main-content">
+    <div id="topbar-mount"></div>
+    <main class="page-content">
+
+      <div class="flex-between mb-6">
+        <div>
+          <h2 style="font-weight:700;">Audit Trail</h2>
+          <p class="text-muted text-sm">Every action is permanently recorded and cannot be deleted</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <span style="color:var(--text-muted);font-size:14px;">🔍</span>
+          <select id="filter-action" class="form-input" style="width:160px;" onchange="renderLogs()">
+            <option value="">All Actions</option>
+            <option value="upload">Upload</option>
+            <option value="view">View</option>
+            <option value="download">Download</option>
+            <option value="verify">Verify</option>
+            <option value="access">Access Grant</option>
+            <option value="request">Change Request</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <input id="filter-user" class="form-input" style="width:180px;" placeholder="Filter by user..." oninput="renderLogs()">
+        </div>
+      </div>
+
+      <!-- Action Stats -->
+      <div id="action-stats" style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;"></div>
+
+      <div class="card" id="log-list"></div>
+
+    </main>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  if(!requireAuth()) throw '';
+  renderSidebar('audit.html');
+  renderTopbar('Audit Logs');
+
+  const actionMeta={
+    upload:{bg:'rgba(16,185,129,.15)',color:'#10b981',label:'⬆ Upload',dot:'dot-upload'},
+    view:{bg:'rgba(59,130,246,.15)',color:'#3b82f6',label:'👁 View',dot:'dot-view'},
+    download:{bg:'rgba(139,92,246,.15)',color:'#8b5cf6',label:'⬇ Download',dot:'dot-download'},
+    verify:{bg:'rgba(245,158,11,.15)',color:'#f59e0b',label:'✔ Verify',dot:'dot-verify'},
+    access:{bg:'rgba(236,72,153,.15)',color:'#ec4899',label:'🔑 Access',dot:'dot-access'},
+    request:{bg:'rgba(99,102,241,.15)',color:'#6366f1',label:'📝 Request',dot:'dot-view'},
+    approved:{bg:'rgba(16,185,129,.15)',color:'#10b981',label:'✅ Approved',dot:'dot-upload'},
+    rejected:{bg:'rgba(239,68,68,.15)',color:'#ef4444',label:'❌ Rejected',dot:'dot-verify'},
+  };
+
+  function renderStats(){
+    const el=document.getElementById('action-stats');
+    el.innerHTML=Object.entries(actionMeta).map(([key,val])=>{
+      const count=DB.audit.filter(l=>l.action===key).length;
+      return `<div style="padding:8px 14px;border-radius:8px;background:${val.bg};border:1px solid ${val.color}33;">
+        <span style="color:${val.color};font-size:13px;font-weight:600;">${val.label}</span>
+        <span style="color:${val.color};font-size:13px;margin-left:8px;">${count}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function renderLogs(){
+    const action=document.getElementById('filter-action').value;
+    const user=document.getElementById('filter-user').value.toLowerCase();
+    let logs=[...DB.audit];
+    if(action) logs=logs.filter(l=>l.action===action);
+    if(user) logs=logs.filter(l=>l.performedBy.toLowerCase().includes(user));
+
+    const el=document.getElementById('log-list');
+    if(!logs.length){
+      el.innerHTML=`<div style="text-align:center;padding:40px;"><div style="font-size:40px;margin-bottom:10px;">📜</div><p class="text-muted">No audit logs found.</p></div>`;
+      return;
+    }
+    el.innerHTML=logs.map((log,i)=>{
+      const ac=actionMeta[log.action]||{bg:'rgba(148,163,184,.1)',color:'#94a3b8',label:log.action,dot:'dot-view'};
+      return `
+      <div style="display:flex;gap:14px;padding:14px 0;border-bottom:${i<logs.length-1?'1px solid var(--border)':'none'};">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="width:36px;height:36px;border-radius:8px;background:${ac.bg};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">${ac.label.split(' ')[0]}</div>
+          ${i<logs.length-1?`<div style="width:1px;flex:1;background:var(--border);min-height:10px;"></div>`:''}
+        </div>
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-weight:700;font-size:14px;">${log.performedBy}</span>
+            <span class="badge" style="background:${ac.bg};color:${ac.color};">${log.action}</span>
+            ${log.evidenceName?`<span style="font-size:13px;color:var(--accent);">"${log.evidenceName}"</span>`:''}
+          </div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">${log.details||''}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;display:flex;gap:12px;flex-wrap:wrap;">
+            <span>🕒 ${fmtDate(log.timestamp)}</span>
+            <span style="text-transform:capitalize;">👤 ${log.performedByRole}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  renderStats();
+  renderLogs();
+</script>
+</body>
+</html>
