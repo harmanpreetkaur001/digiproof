@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Access Control — Evidence Lockbox</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="app-layout">
+  <div class="main-content">
+    <div id="topbar-mount"></div>
+    <main class="page-content">
+
+      <div class="flex-between mb-6">
+        <div>
+          <h2 style="font-weight:700;">Role-Based Access Control</h2>
+          <p class="text-muted text-sm">Manage who can view or download your evidence</p>
+        </div>
+        <button class="btn btn-primary" onclick="toggleForm()">+ Grant Access</button>
+      </div>
+
+      <!-- Grant Form -->
+      <div id="grant-form" style="display:none;" class="card mb" style="margin-bottom:20px;">
+        <h3 style="font-weight:700;margin-bottom:16px;">Grant Evidence Access</h3>
+        <form onsubmit="grantAccess(event)">
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Select Evidence</label>
+              <select id="inp-ev" class="form-input" required>
+                <option value="">-- Select Evidence --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Grant To (Official)</label>
+              <select id="inp-user" class="form-input" required>
+                <option value="">-- Select User --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Permission Level</label>
+              <select id="inp-perm" class="form-input">
+                <option value="view">View Only</option>
+                <option value="download">View + Download</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Expires In (Hours, optional)</label>
+              <input id="inp-exp" type="number" class="form-input" placeholder="e.g. 24 (blank = permanent)">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button type="submit" class="btn btn-primary">✅ Grant Access</button>
+            <button type="button" class="btn btn-ghost" onclick="toggleForm()">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Registered Officials -->
+      <div class="card mb" style="margin-bottom:20px;">
+        <h3 style="font-weight:700;margin-bottom:14px;">Registered Officials</h3>
+        <div class="table-wrap" id="officials-table"></div>
+      </div>
+
+      <!-- Active Grants -->
+      <div class="card" id="grants-section" style="display:none;">
+        <h3 style="font-weight:700;margin-bottom:14px;">Active Access Grants</h3>
+        <div class="table-wrap" id="grants-table"></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  if(!requireAuth()) throw '';
+  if(DB.user?.role !== 'victim') window.location.href='dashboard.html';
+  renderSidebar('access.html');
+  renderTopbar('Access Control');
+
+  const roleColors={police:'#3b82f6',lawyer:'#8b5cf6',court:'#f59e0b'};
+  const officials = DB.users.filter(u=>u.role!=='victim');
+
+  // Populate selects
+  DB.evidence.forEach(ev=>{
+    const o=document.createElement('option'); o.value=ev.id; o.textContent=ev.originalName;
+    document.getElementById('inp-ev').appendChild(o);
+  });
+  officials.forEach(u=>{
+    const o=document.createElement('option'); o.value=u.id; o.textContent=`${u.name} (${u.role}) — ${u.email}`;
+    document.getElementById('inp-user').appendChild(o);
+  });
+
+  function toggleForm(){
+    const f=document.getElementById('grant-form');
+    f.style.display=f.style.display==='none'?'block':'none';
+  }
+
+  function grantAccess(e){
+    e.preventDefault();
+    const evId=document.getElementById('inp-ev').value;
+    const userId=document.getElementById('inp-user').value;
+    const perm=document.getElementById('inp-perm').value;
+    const expH=document.getElementById('inp-exp').value;
+    const ev=DB.evidence.find(e=>e.id===evId);
+    const user=DB.users.find(u=>u.id===userId);
+    if(!ev||!user) return;
+    const grant={id:uid(),evidenceId:evId,evidenceName:ev.originalName,grantedToId:userId,grantedToName:user.name,grantedToRole:user.role,permission:perm,expiresAt:expH?new Date(Date.now()+expH*3600000).toISOString():null,createdAt:new Date().toISOString()};
+    DB.grants.push(grant); save();
+    addAudit('access', evId, ev.originalName, `Access granted to ${user.name} (${perm})`);
+    toggleForm(); renderGrants(); alert('✅ Access granted successfully!');
+  }
+
+  function revokeGrant(id){
+    if(!confirm('Revoke this access?')) return;
+    DB.grants=DB.grants.filter(g=>g.id!==id); save(); renderGrants();
+  }
+
+  function renderOfficials(){
+    const el=document.getElementById('officials-table');
+    if(!officials.length){ el.innerHTML='<p class="text-muted text-sm">No officials registered yet.</p>'; return; }
+    el.innerHTML=`<table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Badge / ID</th></tr></thead><tbody>`+
+      officials.map(u=>`<tr><td style="font-weight:600;">${u.name}</td><td style="color:var(--text-secondary);">${u.email}</td><td><span class="badge" style="background:${roleColors[u.role]||'#475569'}22;color:${roleColors[u.role]||'#94a3b8'};">${u.role}</span></td><td style="color:var(--text-secondary);">${u.badge||'—'}</td></tr>`).join('')+
+      `</tbody></table>`;
+  }
+
+  function renderGrants(){
+    const myGrants=DB.grants.filter(g=>DB.evidence.find(e=>e.id===g.evidenceId));
+    const sec=document.getElementById('grants-section');
+    if(!myGrants.length){ sec.style.display='none'; return; }
+    sec.style.display='block';
+    document.getElementById('grants-table').innerHTML=`<table><thead><tr><th>Granted To</th><th>Role</th><th>Evidence</th><th>Permission</th><th>Expires</th><th>Action</th></tr></thead><tbody>`+
+      myGrants.map(g=>`<tr>
+        <td>${g.grantedToName}</td>
+        <td><span class="badge" style="background:${roleColors[g.grantedToRole]||'#475569'}22;color:${roleColors[g.grantedToRole]||'#94a3b8'};">${g.grantedToRole}</span></td>
+        <td style="color:var(--accent);">${g.evidenceName}</td>
+        <td><span class="badge badge-open">${g.permission}</span></td>
+        <td style="color:var(--text-secondary);">${g.expiresAt?fmtDate(g.expiresAt):'Permanent'}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="revokeGrant('${g.id}')">🗑 Revoke</button></td>
+      </tr>`).join('')+`</tbody></table>`;
+  }
+
+  renderOfficials();
+  renderGrants();
+</script>
+</body>
+</html>
