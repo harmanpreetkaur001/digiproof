@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Access Control – LockBox</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="main">
+    <div id="topbar-mount"></div>
+    <div class="content" id="content"></div>
+  </div>
+
+  <!-- Add User Modal (court only) -->
+  <div class="modal-overlay" id="user-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>👤 Register User</h2>
+        <button class="modal-close" onclick="document.getElementById('user-modal').classList.remove('open')">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input class="form-input" id="new-user-name" placeholder="Enter name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email / Badge ID</label>
+        <input class="form-input" id="new-user-email" placeholder="Enter email" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select class="form-select" id="new-user-role">
+          <option value="police">👮 Police</option>
+          <option value="lawyer">⚖️ Lawyer</option>
+          <option value="court">🏛️ Court</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="saveUser()">Register</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('user-modal').classList.remove('open')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <script src="../js/app.js"></script>
+  <script>
+    requireAuth();
+    const user = getUser();
+    const rc = getRoleConfig();
+
+    document.getElementById('sidebar-mount').innerHTML = sidebarHTML('access');
+    document.getElementById('topbar-mount').innerHTML = topbarHTML('Access Control', 'Court manages all evidence access requests');
+    renderUserBadge();
+
+    function getUsers() {
+      return store.get('lockbox_users') || [
+        { id: uid(), name: 'Officer Rajesh Singh', role: 'police', email: 'r.singh@police.gov.in', added: new Date(Date.now()-86400000).toISOString(), status: 'active' },
+        { id: uid(), name: 'Adv. Priya Sharma',   role: 'lawyer', email: 'p.sharma@lawfirm.in',   added: new Date(Date.now()-43200000).toISOString(), status: 'active' },
+        { id: uid(), name: 'Judge A.K. Verma',    role: 'court',  email: 'ak.verma@court.gov.in', added: new Date(Date.now()-7200000).toISOString(),  status: 'active' }
+      ];
+    }
+    function saveUsers(list) { store.set('lockbox_users', list); }
+
+    function render() {
+      const reqs = getRequests();
+      const pending = reqs.filter(r => r.status === 'pending');
+      const approved = reqs.filter(r => r.status === 'approved');
+      // Only court can approve/reject/manage
+      const canManage = user.role === 'court';
+
+      document.getElementById('content').innerHTML = `
+
+        <!-- Pending Requests Banner -->
+        ${pending.length > 0 && canManage ? `
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.4);border-radius:12px;padding:20px;margin-bottom:20px">
+          <div style="font-size:16px;font-weight:700;color:#f59e0b;margin-bottom:14px">🔔 ${pending.length} Pending Request(s) — Court Approval Required</div>
+          ${pending.map(r => `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <div class="avatar" style="width:28px;height:28px;font-size:11px">${r.requesterName[0]}</div>
+                <strong>${r.requesterName}</strong>
+                <span class="badge ${r.requesterRole==='police'?'badge-blue':'badge-yellow'}">${r.requesterRole}</span>
+              </div>
+              <div style="font-size:13px;color:var(--muted)">
+                Requesting access to: <strong style="color:var(--text)">${r.evidenceName}</strong>
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:3px">Requested: ${fmtDate(r.requestedAt)}</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-success btn-sm" onclick="approveReq('${r.id}')">✅ Approve</button>
+              <button class="btn btn-danger btn-sm" onclick="rejectReq('${r.id}')">❌ Reject</button>
+            </div>
+          </div>`).join('')}
+        </div>` : pending.length > 0 && !canManage ? `
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:16px 20px;margin-bottom:20px">
+          <strong style="color:#f59e0b">⏳ Your ${pending.length} request(s) are pending Court approval</strong>
+        </div>` : ''}
+
+        <!-- Permission Matrix -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;margin-bottom:20px">
+          <div class="section-title">🔐 Role Permission Matrix</div>
+          <div class="table-wrap" style="margin-top:0">
+            <table>
+              <thead><tr><th>Role</th><th>Upload</th><th>View</th><th>Download</th><th>Comment</th><th>Approve Requests</th><th>Delete/Edit</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><span class="role-victim">👤 Victim</span></td>
+                  <td><span class="badge badge-green">✅ Yes</span></td>
+                  <td><span class="badge badge-green">✅ Own only</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-red">❌ Never</span></td>
+                </tr>
+                <tr>
+                  <td><span class="role-police">👮 Police</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-yellow">⏳ Court Approval</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-yellow">⏳ After Approval</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-red">❌ Never</span></td>
+                </tr>
+                <tr>
+                  <td><span class="role-lawyer">⚖️ Lawyer</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-yellow">⏳ Court Approval</span></td>
+                  <td><span class="badge badge-yellow">⏳ After Approval</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-red">❌ Never</span></td>
+                </tr>
+                <tr>
+                  <td><span class="role-court">🏛️ Court</span></td>
+                  <td><span class="badge badge-red">❌ No</span></td>
+                  <td><span class="badge badge-green">✅ Full</span></td>
+                  <td><span class="badge badge-green">✅ Full</span></td>
+                  <td><span class="badge badge-green">✅ Yes</span></td>
+                  <td><span class="badge badge-green">✅ Yes</span></td>
+                  <td><span class="badge badge-red">❌ Never</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Approved Access -->
+        ${approved.length ? `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;margin-bottom:20px">
+          <div class="section-title">✅ Court-Approved Access (${approved.length})</div>
+          <div class="table-wrap" style="margin-top:0">
+            <table>
+              <thead><tr><th>User</th><th>Role</th><th>Evidence</th><th>Approved By</th><th>Date</th></tr></thead>
+              <tbody>
+                ${approved.map(r => `
+                <tr>
+                  <td><strong>${r.requesterName}</strong></td>
+                  <td><span class="badge ${r.requesterRole==='police'?'badge-blue':'badge-yellow'}">${r.requesterRole}</span></td>
+                  <td>${r.evidenceName}</td>
+                  <td><span class="badge badge-purple">🏛️ Court</span></td>
+                  <td style="color:var(--muted)">${fmtDate(r.requestedAt)}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>` : ''}
+
+        <!-- Registered Users -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="section-title" style="margin:0">👥 Registered Users</div>
+          ${canManage ? `<button class="btn btn-primary btn-sm" onclick="document.getElementById('user-modal').classList.add('open')">+ Register User</button>` : ''}
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>User</th><th>Role</th><th>Email</th><th>Added</th><th>Status</th></tr></thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Secure Links (court only) -->
+        ${canManage ? `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;margin-top:20px">
+          <div class="section-title">🔗 Secure Access Links</div>
+          <div id="links-container"><p style="color:var(--muted);font-size:13px">No active links</p></div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="generateLink()">+ Generate New Link</button>
+        </div>` : ''}
+      `;
+
+      renderUsers();
+      renderLinks();
+    }
+
+    function approveReq(id) {
+      if (user.role !== 'court') { toast('⛔ Only Court can approve requests', 'error'); return; }
+      const reqs = getRequests();
+      const r = reqs.find(x => x.id === id);
+      if (r) {
+        r.status = 'approved';
+        r.approvedBy = 'court';
+        saveRequests(reqs);
+        addAuditLog('approve', `Court approved access for ${r.requesterName} to "${r.evidenceName}"`);
+        toast(`✅ Access approved for ${r.requesterName}`, 'success');
+        render();
+      }
+    }
+
+    function rejectReq(id) {
+      if (user.role !== 'court') { toast('⛔ Only Court can reject requests', 'error'); return; }
+      const reqs = getRequests();
+      const r = reqs.find(x => x.id === id);
+      if (r) {
+        r.status = 'rejected';
+        r.approvedBy = null;
+        saveRequests(reqs);
+        addAuditLog('reject', `Court rejected access for ${r.requesterName} to "${r.evidenceName}"`);
+        toast('Access rejected', 'info');
+        render();
+      }
+    }
+
+    function renderUsers() {
+      const users = getUsers();
+      const roleEmoji = { victim:'👤', police:'👮', lawyer:'⚖️', court:'🏛️' };
+      document.getElementById('users-body').innerHTML = users.map(u => `
+        <tr>
+          <td><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="width:28px;height:28px;font-size:11px">${u.name[0]}</div><span style="font-weight:600">${u.name}</span></div></td>
+          <td><span class="badge ${u.role==='police'?'badge-blue':u.role==='lawyer'?'badge-yellow':'badge-purple'}">${roleEmoji[u.role]} ${u.role}</span></td>
+          <td style="color:var(--muted)">${u.email}</td>
+          <td style="color:var(--muted)">${fmtDate(u.added)}</td>
+          <td><span class="badge badge-green">● Active</span></td>
+        </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--muted)">No users</td></tr>`;
+    }
+
+    function renderLinks() {
+      const el = document.getElementById('links-container');
+      if (!el) return;
+      const links = store.get('lockbox_links') || [];
+      if (!links.length) { el.innerHTML = '<p style="color:var(--muted);font-size:13px">No active secure links</p>'; return; }
+      el.innerHTML = links.map(l => `
+        <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+          <span>🔗</span>
+          <div style="flex:1"><div style="font-size:12px;font-family:monospace;color:var(--accent)">${l.url.slice(0,60)}...</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Expires: ${fmtDate(l.expires)} · By ${l.by}</div></div>
+          <span class="badge ${new Date(l.expires)>new Date()?'badge-green':'badge-red'}">${new Date(l.expires)>new Date()?'Active':'Expired'}</span>
+          <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard?.writeText('${l.url}');toast('Copied!','success')">📋</button>
+        </div>`).join('');
+    }
+
+    function saveUser() {
+      if (user.role !== 'court') { toast('⛔ Only Court can register users', 'error'); return; }
+      const name = document.getElementById('new-user-name').value.trim();
+      const email = document.getElementById('new-user-email').value.trim();
+      const role = document.getElementById('new-user-role').value;
+      if (!name || !email) { toast('Name and email required', 'error'); return; }
+      const users = getUsers();
+      users.push({ id: uid(), name, email, role, added: new Date().toISOString(), status: 'active' });
+      saveUsers(users);
+      addAuditLog('access', `Court registered ${role} user: ${name}`);
+      document.getElementById('user-modal').classList.remove('open');
+      toast(`User ${name} registered`, 'success');
+      render();
+    }
+
+    function generateLink() {
+      const links = store.get('lockbox_links') || [];
+      const l = { id: uid(), url: `${window.location.origin}/verify?token=${uid()}`, expires: new Date(Date.now()+86400000).toISOString(), by: user.name };
+      links.unshift(l);
+      store.set('lockbox_links', links);
+      navigator.clipboard?.writeText(l.url).catch(()=>{});
+      toast('🔗 Secure link generated & copied', 'success');
+      render();
+    }
+
+    render();
+  </script>
+</body>
+</html>

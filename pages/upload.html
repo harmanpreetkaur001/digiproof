@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upload Evidence – LockBox</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .upload-result {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 20px;
+      display: none;
+    }
+    .upload-result.show { display: block; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    .meta-item { background: var(--surface); border-radius: 8px; padding: 10px 14px; }
+    .meta-item .k { color: var(--muted); font-size: 11px; margin-bottom: 3px; }
+    .meta-item .v { font-size: 13px; font-weight: 600; word-break: break-all; }
+    .verify-section { margin-top: 24px; }
+    .compare-result { margin-top: 12px; padding: 14px; border-radius: 10px; font-size: 14px; font-weight: 600; display: none; }
+    .compare-result.show { display: block; }
+    .compare-result.match { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #22c55e; }
+    .compare-result.mismatch { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="main">
+    <div id="topbar-mount"></div>
+    <div class="content">
+      <div style="max-width:700px">
+
+        <!-- Upload Form -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;margin-bottom:20px">
+          <div class="section-title">📤 Upload New Evidence</div>
+
+          <!-- Drop Zone -->
+          <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <div class="upload-icon">📂</div>
+            <h3>Drag & Drop Evidence File</h3>
+            <p>Supports: Images, Videos, Audio, PDF, Chat exports</p>
+            <p style="margin-top:8px;color:var(--accent);font-size:13px">or click to browse</p>
+            <input type="file" id="file-input" style="display:none" accept="image/*,video/*,audio/*,.pdf,.txt,.zip" />
+          </div>
+
+          <!-- Selected file preview -->
+          <div id="file-preview" style="display:none;margin-top:14px;background:var(--surface2);border-radius:8px;padding:12px;align-items:center;gap:12px">
+            <span id="prev-icon" style="font-size:28px"></span>
+            <div>
+              <div id="prev-name" style="font-weight:600;font-size:14px"></div>
+              <div id="prev-size" style="color:var(--muted);font-size:12px"></div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px">
+            <div class="form-group" style="margin:0">
+              <label class="form-label">FIR Number</label>
+              <input class="form-input" id="fir-input" placeholder="e.g. FIR-2024-001" />
+            </div>
+            <div class="form-group" style="margin:0">
+              <label class="form-label">Category</label>
+              <select class="form-select" id="cat-input">
+                <option value="Incident 1">Incident 1</option>
+                <option value="Incident 2">Incident 2</option>
+                <option value="Medical">Medical</option>
+                <option value="Communication">Communication</option>
+                <option value="Financial">Financial</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top:14px">
+            <label class="form-label">Description (optional)</label>
+            <textarea class="form-textarea" id="desc-input" placeholder="Brief description of this evidence..."></textarea>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="btn btn-primary" onclick="uploadEvidence()" id="upload-btn">
+              🔒 Upload & Lock Evidence
+            </button>
+            <button class="btn btn-ghost" onclick="resetForm()">✕ Cancel</button>
+          </div>
+        </div>
+
+        <!-- Upload Result -->
+        <div class="upload-result" id="upload-result">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <span style="font-size:24px">✅</span>
+            <div>
+              <div style="font-weight:700;font-size:16px">Evidence Locked Successfully</div>
+              <div style="color:var(--muted);font-size:13px">This file is now tamper-proof and immutable</div>
+            </div>
+          </div>
+
+          <div class="hash-result">
+            <div class="label">SHA-256 Hash</div>
+            <div class="value" id="res-hash"></div>
+            <div class="label" style="margin-top:10px">Timestamp</div>
+            <div class="value" id="res-time" style="color:var(--green)"></div>
+            <div class="label" style="margin-top:10px">Device Fingerprint</div>
+            <div class="value" id="res-device" style="color:var(--muted)"></div>
+          </div>
+
+          <div class="meta-grid">
+            <div class="meta-item"><div class="k">File Name</div><div class="v" id="res-name"></div></div>
+            <div class="meta-item"><div class="k">File Size</div><div class="v" id="res-size"></div></div>
+            <div class="meta-item"><div class="k">FIR Number</div><div class="v" id="res-fir"></div></div>
+            <div class="meta-item"><div class="k">Category</div><div class="v" id="res-cat"></div></div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <a href="evidence.html" class="btn btn-ghost btn-sm">📁 View All Evidence</a>
+            <button class="btn btn-ghost btn-sm" onclick="resetForm()">📤 Upload Another</button>
+          </div>
+        </div>
+
+        <!-- Hash Verify Section -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px">
+          <div class="section-title">🔍 Verify File Integrity</div>
+          <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+            Re-upload a file to compare its hash against the stored original. Detects any tampering.
+          </p>
+          <div class="upload-zone" id="verify-zone" onclick="document.getElementById('verify-input').click()" style="padding:28px">
+            <div style="font-size:32px">🔍</div>
+            <p style="margin-top:8px">Drop file to verify integrity</p>
+            <input type="file" id="verify-input" style="display:none" />
+          </div>
+          <div class="compare-result" id="compare-result"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div id="toast-container" class="toast-container"></div>
+  <script src="../js/app.js"></script>
+  <script>
+    requireAuth();
+    // Only victims can upload
+    const user = getUser();
+    if (user.role !== 'victim') {
+      document.getElementById('sidebar-mount').innerHTML = sidebarHTML('upload');
+      document.getElementById('topbar-mount').innerHTML = topbarHTML('Upload Evidence', 'Only victims can upload evidence');
+      renderUserBadge();
+      document.querySelector('.content').innerHTML = `
+        <div style="text-align:center;padding:60px 20px">
+          <div style="font-size:48px;margin-bottom:16px">🚫</div>
+          <h2>Access Denied</h2>
+          <p style="color:var(--muted);margin-top:8px">Only victims can upload evidence files.</p>
+          <a href="dashboard.html" class="btn btn-primary" style="margin-top:20px">← Back to Dashboard</a>
+        </div>`;
+      throw new Error('Access denied');
+    }
+
+    document.getElementById('sidebar-mount').innerHTML = sidebarHTML('upload');
+    document.getElementById('topbar-mount').innerHTML = topbarHTML('Upload Evidence', 'Lock your evidence permanently');
+    renderUserBadge();
+
+    let selectedFile = null;
+
+    // Drag & drop
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f) setFile(f);
+    });
+
+    document.getElementById('file-input').addEventListener('change', e => {
+      if (e.target.files[0]) setFile(e.target.files[0]);
+    });
+
+    function setFile(f) {
+      selectedFile = f;
+      const prev = document.getElementById('file-preview');
+      prev.style.display = 'flex';
+      document.getElementById('prev-icon').textContent = fileIcon(f.type);
+      document.getElementById('prev-name').textContent = f.name;
+      document.getElementById('prev-size').textContent = fmtSize(f.size) + ' · ' + f.type;
+    }
+
+    async function uploadEvidence() {
+      if (!selectedFile) { toast('Please select a file first', 'error'); return; }
+      const fir = document.getElementById('fir-input').value.trim() || 'Unlinked';
+      const cat = document.getElementById('cat-input').value;
+
+      const btn = document.getElementById('upload-btn');
+      btn.textContent = '⏳ Hashing & Locking...';
+      btn.disabled = true;
+
+      try {
+        const hash = await sha256(selectedFile);
+        const timestamp = new Date().toISOString();
+        const device = getDeviceInfo();
+
+        const entry = {
+          id: uid(),
+          name: selectedFile.name,
+          type: selectedFile.type,
+          size: selectedFile.size,
+          hash,
+          timestamp,
+          fir,
+          category: cat,
+          description: document.getElementById('desc-input').value,
+          device,
+          status: 'verified',
+          locked: true
+        };
+
+        const list = getEvidence();
+        list.unshift(entry);
+        saveEvidence(list);
+        addAuditLog('upload', `Uploaded ${selectedFile.name}`, entry.id);
+
+        // Show result
+        document.getElementById('res-hash').textContent = hash;
+        document.getElementById('res-time').textContent = fmtDate(timestamp);
+        document.getElementById('res-device').textContent = `${device.browser} · ${device.platform} · ${device.screen}`;
+        document.getElementById('res-name').textContent = selectedFile.name;
+        document.getElementById('res-size').textContent = fmtSize(selectedFile.size);
+        document.getElementById('res-fir').textContent = fir;
+        document.getElementById('res-cat').textContent = cat;
+
+        document.getElementById('upload-result').classList.add('show');
+        toast('Evidence locked successfully!', 'success');
+      } catch (err) {
+        toast('Upload failed: ' + err.message, 'error');
+      } finally {
+        btn.textContent = '🔒 Upload & Lock Evidence';
+        btn.disabled = false;
+      }
+    }
+
+    function resetForm() {
+      selectedFile = null;
+      document.getElementById('file-input').value = '';
+      document.getElementById('file-preview').style.display = 'none';
+      document.getElementById('fir-input').value = '';
+      document.getElementById('desc-input').value = '';
+      document.getElementById('upload-result').classList.remove('show');
+    }
+
+    // Verify section
+    document.getElementById('verify-input').addEventListener('change', async e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const res = document.getElementById('compare-result');
+      res.textContent = '⏳ Computing hash...';
+      res.className = 'compare-result show';
+
+      const hash = await sha256(f);
+      const evidence = getEvidence();
+      const match = evidence.find(ev => ev.name === f.name);
+
+      if (!match) {
+        res.className = 'compare-result show mismatch';
+        res.innerHTML = `⚠️ No stored record found for "${f.name}". Cannot verify.`;
+        return;
+      }
+
+      if (match.hash === hash) {
+        res.className = 'compare-result show match';
+        res.innerHTML = `✅ VERIFIED — Hash matches original.<br><small style="font-weight:400;color:var(--muted)">${hash}</small>`;
+        addAuditLog('verify', `Verified integrity of ${f.name}`, match.id);
+      } else {
+        res.className = 'compare-result show mismatch';
+        res.innerHTML = `⚠️ TAMPERED — Hash mismatch detected!<br>
+          <small style="font-weight:400">Original: ${match.hash.slice(0,32)}...</small><br>
+          <small style="font-weight:400">Current:  ${hash.slice(0,32)}...</small>`;
+        match.status = 'tampered';
+        saveEvidence(evidence);
+        addAuditLog('tamper', `Tamper detected on ${f.name}`, match.id);
+        toast('⚠️ Tamper detected!', 'error');
+      }
+    });
+
+    const vz = document.getElementById('verify-zone');
+    vz.addEventListener('dragover', e => { e.preventDefault(); vz.classList.add('drag-over'); });
+    vz.addEventListener('dragleave', () => vz.classList.remove('drag-over'));
+    vz.addEventListener('drop', e => {
+      e.preventDefault(); vz.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f) { document.getElementById('verify-input').files = e.dataTransfer.files; document.getElementById('verify-input').dispatchEvent(new Event('change')); }
+    });
+  </script>
+</body>
+</html>

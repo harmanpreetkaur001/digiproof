@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings – LockBox</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <style>
+    .settings-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 16px;
+    }
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-label { font-size: 14px; }
+    .toggle-desc { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .toggle {
+      width: 44px; height: 24px;
+      background: var(--surface2);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      position: relative;
+      transition: background 0.2s;
+    }
+    .toggle.on { background: var(--accent); border-color: var(--accent); }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      background: #fff;
+      border-radius: 50%;
+      top: 2px; left: 2px;
+      transition: left 0.2s;
+    }
+    .toggle.on::after { left: 22px; }
+  </style>
+</head>
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="main">
+    <div id="topbar-mount"></div>
+    <div class="content" style="max-width:680px">
+
+      <!-- Profile -->
+      <div class="settings-section">
+        <div class="section-title">👤 Profile</div>
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+          <div class="avatar" style="width:56px;height:56px;font-size:22px" id="profile-avatar"></div>
+          <div>
+            <div style="font-weight:700;font-size:16px" id="profile-name"></div>
+            <div style="color:var(--muted);font-size:13px" id="profile-email"></div>
+            <div id="profile-role" style="margin-top:4px"></div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Display Name</label>
+            <input class="form-input" id="set-name" />
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Email</label>
+            <input class="form-input" id="set-email" />
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="saveProfile()">Save Changes</button>
+      </div>
+
+      <!-- Privacy -->
+      <div class="settings-section">
+        <div class="section-title">🔒 Privacy & Security</div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">📍 Location Capture</div>
+            <div class="toggle-desc">Attach GPS coordinates to uploaded evidence</div>
+          </div>
+          <div class="toggle" id="toggle-location" onclick="toggleSetting('location')"></div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">💻 Device Fingerprint</div>
+            <div class="toggle-desc">Record browser and OS info with each upload</div>
+          </div>
+          <div class="toggle on" id="toggle-device" onclick="toggleSetting('device')"></div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">🔔 Access Notifications</div>
+            <div class="toggle-desc">Notify when someone views your evidence</div>
+          </div>
+          <div class="toggle on" id="toggle-notif" onclick="toggleSetting('notif')"></div>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">🌙 Dark Mode</div>
+            <div class="toggle-desc">Always on – optimized for evidence review</div>
+          </div>
+          <div class="toggle on" style="cursor:default"></div>
+        </div>
+      </div>
+
+      <!-- Language -->
+      <div class="settings-section">
+        <div class="section-title">🌐 Language</div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary btn-sm" id="lang-en" onclick="setLang('en')">🇬🇧 English</button>
+          <button class="btn btn-ghost btn-sm" id="lang-hi" onclick="setLang('hi')">🇮🇳 हिंदी</button>
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px">Hindi translation coming soon</p>
+      </div>
+
+      <!-- Danger Zone -->
+      <div class="settings-section" style="border-color:rgba(239,68,68,0.3)">
+        <div class="section-title" style="color:var(--red)">⚠️ Danger Zone</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="clearLogs()">🗑 Clear Audit Logs</button>
+          <button class="btn btn-danger btn-sm" onclick="clearAll()">💣 Reset All Data</button>
+          <button class="btn btn-ghost btn-sm" onclick="logout()">🚪 Logout</button>
+        </div>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px">These actions cannot be undone.</p>
+      </div>
+
+      <!-- About -->
+      <div class="settings-section">
+        <div class="section-title">ℹ️ About LockBox</div>
+        <div style="color:var(--muted);font-size:13px;line-height:1.8">
+          <div>Version: <strong style="color:var(--text)">1.0.0 MVP</strong></div>
+          <div>Hashing: <strong style="color:var(--text)">SHA-256 (Web Crypto API)</strong></div>
+          <div>Storage: <strong style="color:var(--text)">LocalStorage (Demo) / MongoDB (Production)</strong></div>
+          <div>Built for: <strong style="color:var(--text)">🇮🇳 India Justice Tech Hackathon</strong></div>
+          <div style="margin-top:10px;padding:10px;background:var(--surface2);border-radius:8px;font-family:monospace;font-size:12px;color:var(--accent)">
+            "Evidence uploaded once → locked forever → verified always"
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div id="toast-container" class="toast-container"></div>
+  <script src="../js/app.js"></script>
+  <script>
+    requireAuth();
+    document.getElementById('sidebar-mount').innerHTML = sidebarHTML('settings');
+    document.getElementById('topbar-mount').innerHTML = topbarHTML('Settings', 'Manage your account and preferences');
+    renderUserBadge();
+
+    const user = getUser();
+    const roleColors = { victim: '#22c55e', police: '#3b82f6', lawyer: '#f59e0b', court: '#a855f7' };
+    const roleEmoji = { victim: '👤', police: '👮', lawyer: '⚖️', court: '🏛️' };
+
+    document.getElementById('profile-avatar').textContent = user.name[0].toUpperCase();
+    document.getElementById('profile-name').textContent = user.name;
+    document.getElementById('profile-email').textContent = user.email;
+    document.getElementById('profile-role').innerHTML = `<span class="badge" style="background:rgba(79,110,247,0.15);color:${roleColors[user.role]}">${roleEmoji[user.role]} ${user.role.toUpperCase()}</span>`;
+    document.getElementById('set-name').value = user.name;
+    document.getElementById('set-email').value = user.email;
+
+    // Load toggle states
+    const settings = store.get('lockbox_settings') || { location: false, device: true, notif: true };
+    if (!settings.location) document.getElementById('toggle-location').classList.remove('on');
+    if (!settings.device) document.getElementById('toggle-device').classList.remove('on');
+    if (!settings.notif) document.getElementById('toggle-notif').classList.remove('on');
+
+    function toggleSetting(key) {
+      const el = document.getElementById('toggle-' + key);
+      el.classList.toggle('on');
+      settings[key] = el.classList.contains('on');
+      store.set('lockbox_settings', settings);
+      toast(`${key} ${settings[key] ? 'enabled' : 'disabled'}`, 'info');
+    }
+
+    function saveProfile() {
+      const name = document.getElementById('set-name').value.trim();
+      const email = document.getElementById('set-email').value.trim();
+      if (!name || !email) { toast('Name and email required', 'error'); return; }
+      user.name = name; user.email = email;
+      store.set('lockbox_user', user);
+      document.getElementById('profile-name').textContent = name;
+      document.getElementById('profile-email').textContent = email;
+      renderUserBadge();
+      toast('Profile updated!', 'success');
+    }
+
+    function setLang(l) {
+      if (l === 'hi') { toast('हिंदी अनुवाद जल्द आ रहा है!', 'info'); return; }
+      toast('English selected', 'success');
+    }
+
+    function clearLogs() {
+      if (!confirm('Clear all audit logs?')) return;
+      store.del('lockbox_audit');
+      toast('Audit logs cleared', 'info');
+    }
+
+    function clearAll() {
+      if (!confirm('This will delete ALL data including evidence records. Continue?')) return;
+      ['lockbox_evidence','lockbox_audit','lockbox_firs','lockbox_users','lockbox_links','lockbox_settings'].forEach(k => store.del(k));
+      toast('All data cleared', 'info');
+      setTimeout(() => window.location.href = 'dashboard.html', 1000);
+    }
+  </script>
+</body>
+</html>

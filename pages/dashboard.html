@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – LockBox</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="main">
+    <div id="topbar-mount"></div>
+    <div class="content" id="content"></div>
+  </div>
+  <div id="toast-container" class="toast-container"></div>
+  <script src="../js/app.js"></script>
+  <script>
+    requireAuth();
+    const user = getUser();
+    const rc = getRoleConfig();
+
+    document.getElementById('sidebar-mount').innerHTML = sidebarHTML('dashboard');
+    document.getElementById('topbar-mount').innerHTML = topbarHTML(rc.dashTitle, rc.dashSub);
+    renderUserBadge();
+
+    const dashRenderers = { victim: renderVictim, police: renderPolice, lawyer: renderLawyer, court: renderCourt };
+    (dashRenderers[user.role] || renderVictim)();
+
+    // ── VICTIM DASHBOARD ──────────────────────────────────────────
+    function renderVictim() {
+      const evidence = getEvidence();
+      const logs = getAuditLogs();
+      const firs = [...new Set(evidence.map(e => e.fir).filter(Boolean))];
+      const verified = evidence.filter(e => e.status === 'verified').length;
+      const pending = getRequests().filter(r => r.status === 'pending').length;
+
+      document.getElementById('content').innerHTML = `
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue">📁</div>
+            <div><div class="stat-val">${evidence.length}</div><div class="stat-label">Evidence Files</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">🧾</div>
+            <div><div class="stat-val">${firs.length}</div><div class="stat-label">FIR Cases</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon yellow">✅</div>
+            <div><div class="stat-val">${verified}</div><div class="stat-label">Verified Files</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple">🔔</div>
+            <div><div class="stat-val">${pending}</div><div class="stat-label">Pending Requests</div></div>
+          </div>
+        </div>
+
+        ${pending > 0 ? `
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:22px">🔔</span>
+            <div>
+              <strong style="color:#f59e0b">${pending} access request(s) awaiting your approval</strong>
+              <div style="font-size:13px;color:var(--muted)">Police / Lawyer are requesting to view your evidence</div>
+            </div>
+          </div>
+          <a href="access.html" class="btn btn-primary btn-sm">Review Requests →</a>
+        </div>` : ''}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div class="section-title">📁 My Evidence</div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>File</th><th>FIR</th><th>Status</th></tr></thead>
+                <tbody>
+                  ${evidence.slice(0,5).map(e => `
+                  <tr>
+                    <td>
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <span>${fileIcon(e.type)}</span>
+                        <div>
+                          <div style="font-weight:600;font-size:13px">${e.name}</div>
+                          <div style="color:var(--muted);font-size:11px">${fmtSize(e.size)}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="badge badge-blue">${e.fir||'Unlinked'}</span></td>
+                    <td><span class="badge ${e.status==='verified'?'badge-green':'badge-red'}">${e.status==='verified'?'✅ Verified':'⚠️ Tampered'}</span></td>
+                  </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No evidence yet. <a href="upload.html" style="color:var(--accent)">Upload now →</a></td></tr>'}
+                </tbody>
+              </table>
+            </div>
+            <a href="upload.html" class="btn btn-primary btn-sm" style="margin-top:12px">📤 Upload New Evidence</a>
+          </div>
+          <div>
+            <div class="section-title">📜 Recent Activity</div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px">
+              ${logs.slice(0,6).map(l => `
+              <div class="audit-item">
+                <div class="audit-dot ${l.action}"></div>
+                <div>
+                  <div class="audit-text">${l.detail}</div>
+                  <div class="audit-time">${fmtDate(l.time)} · <span class="role-${l.role}">${l.role}</span></div>
+                </div>
+              </div>`).join('') || '<div style="color:var(--muted);font-size:13px">No activity yet</div>'}
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div class="section-title">🔐 Quick Actions</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <a href="upload.html" class="btn btn-primary">📤 Upload Evidence</a>
+            <a href="fir.html" class="btn btn-ghost">🧾 Create FIR Case</a>
+            <a href="access.html" class="btn btn-ghost">🔒 Manage Access ${pending>0?`<span style="background:#ef4444;border-radius:10px;padding:1px 6px;font-size:10px">${pending}</span>`:''}</a>
+            <a href="audit.html" class="btn btn-ghost">📜 View Audit Trail</a>
+          </div>
+        </div>`;
+    }
+
+    // ── POLICE DASHBOARD ──────────────────────────────────────────
+    function renderPolice() {
+      const evidence = getEvidence();
+      const myReqs = getRequests().filter(r => r.requesterId === user.id);
+      const approved = myReqs.filter(r => r.status === 'approved');
+      const pending = myReqs.filter(r => r.status === 'pending');
+      const firs = [...new Set(evidence.map(e => e.fir).filter(Boolean))];
+
+      document.getElementById('content').innerHTML = `
+        <div style="background:linear-gradient(135deg,rgba(59,130,246,0.15),rgba(59,130,246,0.05));border:1px solid rgba(59,130,246,0.3);border-radius:14px;padding:24px;margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <span style="font-size:40px">👮</span>
+            <div>
+              <div style="font-size:20px;font-weight:700">Welcome, Officer ${user.name}</div>
+              <div style="color:var(--muted);margin-top:4px">You can browse evidence and request access for investigation. Victim must approve your request.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue">📁</div>
+            <div><div class="stat-val">${evidence.length}</div><div class="stat-label">Total Evidence</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">✅</div>
+            <div><div class="stat-val">${approved.length}</div><div class="stat-label">Approved Access</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon yellow">⏳</div>
+            <div><div class="stat-val">${pending.length}</div><div class="stat-label">Pending Requests</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple">🧾</div>
+            <div><div class="stat-val">${firs.length}</div><div class="stat-label">FIR Cases</div></div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div class="section-title">🔍 Evidence Requiring Investigation</div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>File</th><th>FIR</th><th>Access</th></tr></thead>
+                <tbody>
+                  ${evidence.slice(0,6).map(e => {
+                    const req = myReqs.find(r => r.evidenceId === e.id);
+                    const statusBadge = !req
+                      ? `<button class="btn btn-primary btn-sm" onclick="requestAccess('${e.id}','${e.name}');location.reload()">Request Access</button>`
+                      : req.status === 'approved'
+                        ? `<span class="badge badge-green">✅ Approved</span>`
+                        : req.status === 'rejected'
+                          ? `<span class="badge badge-red">❌ Rejected</span>`
+                          : `<span class="badge badge-yellow">⏳ Pending</span>`;
+                    return `<tr>
+                      <td><div style="display:flex;align-items:center;gap:8px"><span>${fileIcon(e.type)}</span><span style="font-weight:600;font-size:13px">${e.name}</span></div></td>
+                      <td><span class="badge badge-blue">${e.fir||'—'}</span></td>
+                      <td>${statusBadge}</td>
+                    </tr>`;
+                  }).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No evidence available</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div class="section-title">✅ My Approved Evidence</div>
+            ${approved.length ? `
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Evidence</th><th>Action</th></tr></thead>
+                <tbody>
+                  ${approved.map(r => `
+                  <tr>
+                    <td><div style="font-weight:600;font-size:13px">${r.evidenceName}</div><div style="color:var(--muted);font-size:11px">Approved access</div></td>
+                    <td><a href="evidence.html" class="btn btn-ghost btn-sm">👁 View</a></td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>` : `
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;text-align:center;color:var(--muted)">
+              <div style="font-size:36px;margin-bottom:10px">🔒</div>
+              <div>No approved access yet</div>
+              <div style="font-size:12px;margin-top:6px">Request access to evidence from the table on the left</div>
+            </div>`}
+          </div>
+        </div>
+
+        <div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px">
+          <div class="section-title">ℹ️ Your Permissions as Police Officer</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+            ${[
+              ['🔍 Browse Evidence List','✅ Allowed'],
+              ['📤 Upload Evidence','❌ Not Allowed'],
+              ['👁 View Evidence Details','⏳ Requires Approval'],
+              ['⬇ Download Files','❌ Not Allowed'],
+              ['💬 Add Comments','✅ After Approval'],
+              ['🔗 Share Links','❌ Not Allowed']
+            ].map(([label,val]) => `
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px">
+                <div style="font-weight:600">${label}</div>
+                <div style="color:var(--muted);margin-top:3px">${val}</div>
+              </div>`).join('')}
+          </div>
+        </div>`;
+    }
+
+    // ── LAWYER DASHBOARD ──────────────────────────────────────────
+    function renderLawyer() {
+      const evidence = getEvidence();
+      const myReqs = getRequests().filter(r => r.requesterId === user.id);
+      const approved = myReqs.filter(r => r.status === 'approved');
+      const pending = myReqs.filter(r => r.status === 'pending');
+
+      document.getElementById('content').innerHTML = `
+        <div style="background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(245,158,11,0.05));border:1px solid rgba(245,158,11,0.3);border-radius:14px;padding:24px;margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <span style="font-size:40px">⚖️</span>
+            <div>
+              <div style="font-size:20px;font-weight:700">Welcome, Adv. ${user.name}</div>
+              <div style="color:var(--muted);margin-top:4px">Request access to case evidence. Once approved by the victim, you can view and download files for legal proceedings.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue">📁</div>
+            <div><div class="stat-val">${evidence.length}</div><div class="stat-label">Total Evidence</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">✅</div>
+            <div><div class="stat-val">${approved.length}</div><div class="stat-label">Approved Files</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon yellow">⏳</div>
+            <div><div class="stat-val">${pending.length}</div><div class="stat-label">Pending Requests</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple">⬇️</div>
+            <div><div class="stat-val">${approved.length}</div><div class="stat-label">Available Downloads</div></div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div class="section-title">📁 Request Evidence Access</div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>File</th><th>FIR</th><th>Access</th></tr></thead>
+                <tbody>
+                  ${evidence.slice(0,6).map(e => {
+                    const req = myReqs.find(r => r.evidenceId === e.id);
+                    const statusBadge = !req
+                      ? `<button class="btn btn-primary btn-sm" onclick="requestAccess('${e.id}','${e.name}');location.reload()">Request</button>`
+                      : req.status === 'approved'
+                        ? `<span class="badge badge-green">✅ Approved</span>`
+                        : req.status === 'rejected'
+                          ? `<span class="badge badge-red">❌ Rejected</span>`
+                          : `<span class="badge badge-yellow">⏳ Pending</span>`;
+                    return `<tr>
+                      <td><div style="display:flex;align-items:center;gap:8px"><span>${fileIcon(e.type)}</span><span style="font-weight:600;font-size:13px">${e.name}</span></div></td>
+                      <td><span class="badge badge-blue">${e.fir||'—'}</span></td>
+                      <td>${statusBadge}</td>
+                    </tr>`;
+                  }).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No evidence available</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div class="section-title">⬇️ Approved – Ready to Download</div>
+            ${approved.length ? `
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Evidence</th><th>Action</th></tr></thead>
+                <tbody>
+                  ${approved.map(r => `
+                  <tr>
+                    <td><div style="font-weight:600;font-size:13px">${r.evidenceName}</div><div style="color:var(--muted);font-size:11px">Approved for download</div></td>
+                    <td>
+                      <div style="display:flex;gap:6px">
+                        <a href="evidence.html" class="btn btn-ghost btn-sm">👁</a>
+                        <button class="btn btn-primary btn-sm" onclick="toast('⬇️ Downloading ${r.evidenceName}','success')">⬇</button>
+                      </div>
+                    </td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>
+            </div>` : `
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;text-align:center;color:var(--muted)">
+              <div style="font-size:36px;margin-bottom:10px">⚖️</div>
+              <div>No approved downloads yet</div>
+              <div style="font-size:12px;margin-top:6px">Request access to evidence files for your case</div>
+            </div>`}
+          </div>
+        </div>`;
+    }
+
+    // ── COURT DASHBOARD ───────────────────────────────────────────
+    function renderCourt() {
+      const evidence = getEvidence();
+      const logs = getAuditLogs();
+      const allReqs = getRequests();
+      const pending = allReqs.filter(r => r.status === 'pending');
+      const firs = [...new Set(evidence.map(e => e.fir).filter(Boolean))];
+      const verified = evidence.filter(e => e.status === 'verified').length;
+
+      document.getElementById('content').innerHTML = `
+        <div style="background:linear-gradient(135deg,rgba(168,85,247,0.15),rgba(168,85,247,0.05));border:1px solid rgba(168,85,247,0.3);border-radius:14px;padding:24px;margin-bottom:24px">
+          <div style="display:flex;align-items:center;gap:14px">
+            <span style="font-size:40px">🏛️</span>
+            <div>
+              <div style="font-size:20px;font-weight:700">Your Honour, ${user.name}</div>
+              <div style="color:var(--muted);margin-top:4px">You have full authority over all evidence. View, download, comment, and manage all access requests.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue">📁</div>
+            <div><div class="stat-val">${evidence.length}</div><div class="stat-label">Total Evidence</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">✅</div>
+            <div><div class="stat-val">${verified}</div><div class="stat-label">Verified Files</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon yellow">🧾</div>
+            <div><div class="stat-val">${firs.length}</div><div class="stat-label">Active FIR Cases</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple">📜</div>
+            <div><div class="stat-val">${logs.length}</div><div class="stat-label">Audit Events</div></div>
+          </div>
+        </div>
+
+        ${pending.length > 0 ? `
+        <div style="background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:12px;padding:16px 20px;margin-bottom:20px">
+          <div style="font-weight:700;color:#a855f7;margin-bottom:10px">⚖️ Pending Access Requests (${pending.length})</div>
+          ${pending.slice(0,3).map(r => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <span style="font-weight:600">${r.requesterName}</span>
+              <span class="badge badge-blue" style="margin:0 8px">${r.requesterRole}</span>
+              requested access to <strong>${r.evidenceName}</strong>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-success btn-sm" onclick="approveRequest('${r.id}')">✅ Approve</button>
+              <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')">❌ Reject</button>
+            </div>
+          </div>`).join('')}
+          ${pending.length > 3 ? `<a href="access.html" style="font-size:13px;color:var(--accent);display:block;margin-top:8px">View all ${pending.length} requests →</a>` : ''}
+        </div>` : ''}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div class="section-title">📁 All Evidence</div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>File</th><th>FIR</th><th>Status</th></tr></thead>
+                <tbody>
+                  ${evidence.slice(0,5).map(e => `
+                  <tr>
+                    <td><div style="display:flex;align-items:center;gap:8px"><span>${fileIcon(e.type)}</span><span style="font-weight:600;font-size:13px">${e.name}</span></div></td>
+                    <td><span class="badge badge-blue">${e.fir||'—'}</span></td>
+                    <td><span class="badge ${e.status==='verified'?'badge-green':'badge-red'}">${e.status==='verified'?'✅ Verified':'⚠️ Tampered'}</span></td>
+                  </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No evidence</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <div class="section-title">📜 Recent Activity</div>
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px">
+              ${logs.slice(0,6).map(l => `
+              <div class="audit-item">
+                <div class="audit-dot ${l.action}"></div>
+                <div>
+                  <div class="audit-text">${l.detail}</div>
+                  <div class="audit-time">${fmtDate(l.time)} · <span class="role-${l.role}">${l.role}</span></div>
+                </div>
+              </div>`).join('') || '<div style="color:var(--muted);font-size:13px">No activity</div>'}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function approveRequest(id) {
+      const reqs = getRequests();
+      const r = reqs.find(x => x.id === id);
+      if (r) { r.status = 'approved'; r.approvedBy = 'court'; saveRequests(reqs); addAuditLog('approve', `Court approved access for ${r.requesterName} to "${r.evidenceName}"`); toast(`✅ Access approved for ${r.requesterName}`, 'success'); renderCourt(); }
+    }
+    function rejectRequest(id) {
+      const reqs = getRequests();
+      const r = reqs.find(x => x.id === id);
+      if (r) { r.status = 'rejected'; r.approvedBy = null; saveRequests(reqs); addAuditLog('reject', `Court rejected access for ${r.requesterName} to "${r.evidenceName}"`); toast('Access rejected', 'info'); renderCourt(); }
+    }
+  </script>
+</body>
+</html>

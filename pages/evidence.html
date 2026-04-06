@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evidence – LockBox</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="main">
+    <div id="topbar-mount"></div>
+    <div class="content">
+      <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+        <input class="form-input" id="search" placeholder="🔍 Search files..." style="max-width:240px" oninput="render()" />
+        <select class="form-select" id="filter-fir" style="max-width:180px" onchange="render()">
+          <option value="">All FIR Cases</option>
+        </select>
+        <select class="form-select" id="filter-status" style="max-width:160px" onchange="render()">
+          <option value="">All Status</option>
+          <option value="verified">✅ Verified</option>
+          <option value="tampered">⚠️ Tampered</option>
+        </select>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" id="view-grid" onclick="setView('grid')">⊞ Grid</button>
+          <button class="btn btn-ghost btn-sm" id="view-list" onclick="setView('list')">☰ List</button>
+        </div>
+      </div>
+      <div id="evidence-container"></div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div class="modal-overlay" id="detail-modal">
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header">
+        <h2>📄 Evidence Details</h2>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <script src="../js/app.js"></script>
+  <script>
+    requireAuth();
+    const user = getUser();
+    const rc = getRoleConfig();
+
+    const pageTitles = { victim:'My Evidence', police:'Browse Evidence', lawyer:'Case Evidence', court:'All Evidence' };
+    const pageSubs = { victim:'All your locked evidence files', police:'Request access to view evidence details', lawyer:'Request and download approved case files', court:'Full access to all evidence' };
+
+    document.getElementById('sidebar-mount').innerHTML = sidebarHTML('evidence');
+    document.getElementById('topbar-mount').innerHTML = topbarHTML(pageTitles[user.role]||'Evidence', pageSubs[user.role]||'');
+    renderUserBadge();
+
+    let viewMode = 'grid';
+
+    function setView(v) {
+      viewMode = v;
+      document.getElementById('view-grid').style.borderColor = v==='grid' ? 'var(--accent)' : '';
+      document.getElementById('view-list').style.borderColor = v==='list' ? 'var(--accent)' : '';
+      render();
+    }
+
+    function populateFilters() {
+      const firs = [...new Set(getEvidence().map(e => e.fir).filter(Boolean))];
+      const sel = document.getElementById('filter-fir');
+      firs.forEach(f => { const o = document.createElement('option'); o.value=f; o.textContent=f; sel.appendChild(o); });
+    }
+
+    function render() {
+      let evidence = getEvidence();
+      const q = document.getElementById('search').value.toLowerCase();
+      const firF = document.getElementById('filter-fir').value;
+      const statusF = document.getElementById('filter-status').value;
+      if (q) evidence = evidence.filter(e => e.name.toLowerCase().includes(q) || (e.fir||'').toLowerCase().includes(q));
+      if (firF) evidence = evidence.filter(e => e.fir === firF);
+      if (statusF) evidence = evidence.filter(e => e.status === statusF);
+
+      const container = document.getElementById('evidence-container');
+      if (!evidence.length) {
+        container.innerHTML = `<div style="text-align:center;padding:60px;color:var(--muted)">
+          <div style="font-size:48px;margin-bottom:12px">📭</div>
+          <p>No evidence files found</p>
+          ${user.role==='victim' ? '<a href="upload.html" class="btn btn-primary" style="margin-top:16px">📤 Upload Evidence</a>' : ''}
+        </div>`;
+        return;
+      }
+
+      if (viewMode === 'grid') {
+        container.innerHTML = `<div class="evidence-grid">${evidence.map(e => cardHTML(e)).join('')}</div>`;
+      } else {
+        container.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>File</th><th>FIR</th><th>Category</th><th>Size</th><th>Uploaded</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${evidence.map(e => rowHTML(e)).join('')}</tbody>
+        </table></div>`;
+      }
+    }
+
+    function cardHTML(e) {
+      const approved = hasAccess(e.id);
+      const myReq = getRequests().find(r => r.evidenceId === e.id && r.requesterId === user.id);
+
+      // Show locked card only for police/lawyer WITHOUT court approval
+      if ((user.role === 'police' || user.role === 'lawyer') && !approved) {
+        const reqStatus = myReq ? myReq.status : null;
+        return `
+        <div class="evidence-card" style="opacity:0.85">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div class="file-icon" style="font-size:28px">${fileIcon(e.type)}</div>
+            <span style="font-size:20px">🔒</span>
+          </div>
+          <div class="file-name" title="${e.name}">${e.name}</div>
+          <div class="file-meta">${fmtSize(e.size)} · ${e.category||'Uncategorized'}</div>
+          <div style="background:var(--surface2);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--muted);margin-bottom:12px">
+            🔒 Access restricted — Court approval required
+          </div>
+          <div style="margin-bottom:10px">
+            <span class="badge badge-blue">${e.fir||'Unlinked'}</span>
+          </div>
+          <div class="card-actions">
+            ${!reqStatus || reqStatus==='rejected' ?
+              `<button class="btn btn-primary btn-sm" onclick="requestAccess('${e.id}','${e.name}');render()">🔑 Request Access</button>` :
+              reqStatus==='pending' ? `<span class="badge badge-yellow">⏳ Awaiting Court Approval</span>` :
+              `<span class="badge badge-green">✅ Approved</span>`}
+          </div>
+        </div>`;
+      }
+
+      // Full card — victim (read-only), court, or police/lawyer with court approval
+      const canDl = rc.canDownload && user.role !== 'police';
+      const canComment = user.role === 'court' || (user.role === 'police' && approved);
+      return `
+      <div class="evidence-card">
+        <div class="file-icon">${fileIcon(e.type)}</div>
+        <div class="file-name" title="${e.name}">${e.name}</div>
+        <div class="file-meta">${fmtSize(e.size)} · ${e.category||'Uncategorized'}</div>
+        <div class="hash-preview" title="${e.hash}">${e.hash.slice(0,20)}...${e.hash.slice(-8)}</div>
+        <div style="margin-bottom:10px">
+          <span class="badge ${e.status==='verified'?'badge-green':'badge-red'}">${e.status==='verified'?'✅ Verified':'⚠️ Tampered'}</span>
+          ${e.fir ? `<span class="badge badge-blue" style="margin-left:4px">${e.fir}</span>` : ''}
+          ${approved && (user.role==='police'||user.role==='lawyer') ? `<span class="badge badge-purple" style="margin-left:4px">🏛️ Court Approved</span>` : ''}
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-ghost btn-sm" onclick="viewDetail('${e.id}')">👁 View</button>
+          ${canDl ? `<button class="btn btn-ghost btn-sm" onclick="downloadEvidence('${e.id}')">⬇ Download</button>` : ''}
+          ${canComment ? `<button class="btn btn-ghost btn-sm" onclick="addComment('${e.id}')">💬 Comment</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="shareLink('${e.id}')">🔗 Share</button>
+        </div>
+      </div>`;
+    }
+
+    function rowHTML(e) {
+      const approved = hasAccess(e.id);
+      const myReq = getRequests().find(r => r.evidenceId === e.id && r.requesterId === user.id);
+
+      if ((user.role === 'police' || user.role === 'lawyer') && !approved) {
+        const reqStatus = myReq ? myReq.status : null;
+        return `<tr>
+          <td><div style="display:flex;align-items:center;gap:8px"><span>${fileIcon(e.type)}</span><span style="font-weight:600">${e.name}</span></div></td>
+          <td><span class="badge badge-blue">${e.fir||'—'}</span></td>
+          <td>${e.category||'—'}</td>
+          <td>${fmtSize(e.size)}</td>
+          <td style="color:var(--muted)">${fmtDate(e.timestamp)}</td>
+          <td><span style="color:var(--muted);font-size:12px">🔒 Locked</span></td>
+          <td>${!reqStatus || reqStatus==='rejected' ?
+            `<button class="btn btn-primary btn-sm" onclick="requestAccess('${e.id}','${e.name}');render()">🔑 Request</button>` :
+            reqStatus==='pending' ? `<span class="badge badge-yellow">⏳ Court Pending</span>` :
+            `<span class="badge badge-green">✅ Approved</span>`}
+          </td>
+        </tr>`;
+      }
+
+      const canDl = rc.canDownload && user.role !== 'police';
+      const canComment = user.role === 'court' || (user.role === 'police' && approved);
+      return `<tr>
+        <td><div style="display:flex;align-items:center;gap:8px"><span>${fileIcon(e.type)}</span><span style="font-weight:600">${e.name}</span></div></td>
+        <td><span class="badge badge-blue">${e.fir||'—'}</span></td>
+        <td>${e.category||'—'}</td>
+        <td>${fmtSize(e.size)}</td>
+        <td style="color:var(--muted)">${fmtDate(e.timestamp)}</td>
+        <td>
+          <span class="badge ${e.status==='verified'?'badge-green':'badge-red'}">${e.status==='verified'?'✅ Verified':'⚠️ Tampered'}</span>
+          ${approved && (user.role==='police'||user.role==='lawyer') ? `<span class="badge badge-purple" style="margin-left:4px">🏛️</span>` : ''}
+        </td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick="viewDetail('${e.id}')">👁</button>
+            ${canDl ? `<button class="btn btn-ghost btn-sm" onclick="downloadEvidence('${e.id}')">⬇</button>` : ''}
+            ${canComment ? `<button class="btn btn-ghost btn-sm" onclick="addComment('${e.id}')">💬</button>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="shareLink('${e.id}')">🔗</button>
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    function viewDetail(id) {
+      const e = getEvidence().find(x => x.id === id);
+      if (!e) return;
+      // Block view if police/lawyer without court approval
+      if ((user.role === 'police' || user.role === 'lawyer') && !hasAccess(id)) {
+        toast('⛔ Court approval required to view this evidence', 'error'); return;
+      }
+      addAuditLog('view', `${user.name} viewed ${e.name}`, id);
+      const approved = hasAccess(id);
+      const canDl = rc.canDownload && user.role !== 'police';
+      document.getElementById('modal-body').innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+          <span style="font-size:40px">${fileIcon(e.type)}</span>
+          <div>
+            <div style="font-weight:700;font-size:16px">${e.name}</div>
+            <div style="color:var(--muted);font-size:13px">${fmtSize(e.size)} · ${e.type}</div>
+          </div>
+          <div style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <span class="badge ${e.status==='verified'?'badge-green':'badge-red'}">${e.status==='verified'?'✅ Verified':'⚠️ Tampered'}</span>
+            ${approved && (user.role==='police'||user.role==='lawyer') ? `<span class="badge badge-purple">🏛️ Court Approved</span>` : ''}
+          </div>
+        </div>
+        <div class="hash-result">
+          <div class="label">SHA-256 Hash</div>
+          <div class="value">${e.hash}</div>
+        </div>
+        <div style="margin-top:16px">
+          ${[
+            ['📅 Timestamp', fmtDate(e.timestamp)],
+            ['🧾 FIR Number', e.fir||'Not linked'],
+            ['📂 Category', e.category||'—'],
+            ['💻 Device', `${e.device?.browser||'—'} · ${e.device?.platform||'—'}`],
+            ['🔒 Locked', e.locked ? 'Yes – Immutable' : 'No'],
+            ['📝 Description', e.description||'—']
+          ].map(([k,v]) => `<div class="meta-row"><span class="meta-key">${k}</span><span>${v}</span></div>`).join('')}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+          ${canDl ? `<button class="btn btn-primary btn-sm" onclick="downloadEvidence('${e.id}')">⬇ Download</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="shareLink('${e.id}')">🔗 Share</button>
+          <a href="audit.html" class="btn btn-ghost btn-sm">📜 Logs</a>
+        </div>`;
+      document.getElementById('detail-modal').classList.add('open');
+    }
+
+    function closeModal() { document.getElementById('detail-modal').classList.remove('open'); }
+
+    function downloadEvidence(id) {
+      if (user.role === 'police') { toast('⛔ Police cannot download evidence', 'error'); return; }
+      if ((user.role === 'lawyer') && !hasAccess(id)) { toast('⛔ Court approval required to download', 'error'); return; }
+      const e = getEvidence().find(x => x.id === id);
+      if (!e) return;
+      addAuditLog('download', `${user.name} downloaded ${e.name}`, id);
+      toast(`⬇️ Downloading ${e.name}`, 'success');
+    }
+
+    function shareLink(id) {
+      navigator.clipboard?.writeText(`${window.location.origin}/verify?id=${id}&token=${uid()}`).catch(()=>{});
+      toast('🔗 Secure link copied (24hr expiry)', 'success');
+      addAuditLog('share', `Shared link for evidence`, id);
+    }
+
+    function deleteEvidence(id) {
+      toast('⛔ Evidence cannot be deleted — all records are permanent', 'error');
+    }
+
+    function addComment(id) {
+      const c = prompt('Add your comment / observation:');
+      if (!c) return;
+      const e = getEvidence().find(x => x.id === id);
+      addAuditLog('comment', `${user.name} commented on ${e?.name}: "${c}"`, id);
+      toast('💬 Comment added to audit log', 'success');
+    }
+
+    populateFilters();
+    render();
+    setView('grid');
+  </script>
+</body>
+</html>

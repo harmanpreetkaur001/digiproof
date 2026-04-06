@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FIR Cases – LockBox</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="main">
+    <div id="topbar-mount"></div>
+    <div class="content">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div id="fir-header-info" style="color:var(--muted);font-size:13px"></div>
+        <div id="fir-actions"></div>
+      </div>
+      <div id="fir-container"></div>
+    </div>
+  </div>
+
+  <!-- Add FIR Modal -->
+  <div class="modal-overlay" id="fir-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>🧾 New FIR Case</h2>
+        <button class="modal-close" onclick="document.getElementById('fir-modal').classList.remove('open')">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">FIR Number</label>
+        <input class="form-input" id="new-fir-num" placeholder="e.g. FIR-2024-003" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Case Title</label>
+        <input class="form-input" id="new-fir-title" placeholder="Brief case title" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Police Station</label>
+        <input class="form-input" id="new-fir-station" placeholder="e.g. Sector 17 Police Station" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date Filed</label>
+        <input class="form-input" id="new-fir-date" type="date" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-textarea" id="new-fir-desc" placeholder="Case description..."></textarea>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="saveFIR()">Save FIR</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('fir-modal').classList.remove('open')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+  <script src="../js/app.js"></script>
+  <script>
+    requireAuth();
+    const user = getUser();
+    const rc = getRoleConfig();
+
+    const titles = { victim:'My FIR Cases', police:'FIR Investigation Cases', lawyer:'Case Files', court:'All FIR Cases' };
+    const subs = { victim:'Create and manage your FIR cases', police:'View FIR cases linked to evidence', lawyer:'FIR cases with linked evidence', court:'Full overview of all FIR cases' };
+
+    document.getElementById('sidebar-mount').innerHTML = sidebarHTML('fir');
+    document.getElementById('topbar-mount').innerHTML = topbarHTML(titles[user.role]||'FIR Cases', subs[user.role]||'');
+    renderUserBadge();
+
+    function getFIRs() {
+      return store.get('lockbox_firs') || [
+        { id:'FIR-2024-001', title:'Assault Case – Sector 22', station:'Sector 22 PS', date:'2024-01-15', desc:'Physical assault reported by victim. CCTV footage and medical reports attached.', status:'active' },
+        { id:'FIR-2024-002', title:'Workplace Harassment Case', station:'Civil Lines PS', date:'2024-02-03', desc:'Workplace harassment complaint with chat evidence and witness statements.', status:'active' }
+      ];
+    }
+    function saveFIRs(list) { store.set('lockbox_firs', list); }
+
+    function render() {
+      const firs = getFIRs();
+      const evidence = getEvidence();
+
+      // Role-specific header
+      const headerInfo = {
+        victim: `${firs.length} active case(s) — you can create new FIR cases and link evidence`,
+        police: `${firs.length} case(s) available for investigation — request evidence access from the Evidence page`,
+        lawyer: `${firs.length} case(s) — request access to linked evidence for legal proceedings`,
+        court: `${firs.length} total case(s) — full authority to review all linked evidence`
+      };
+      document.getElementById('fir-header-info').textContent = headerInfo[user.role] || '';
+
+      if (user.role === 'victim') {
+        document.getElementById('fir-actions').innerHTML = `<button class="btn btn-primary" onclick="openAddFIR()">+ New FIR Case</button>`;
+      }
+
+      if (!firs.length) {
+        document.getElementById('fir-container').innerHTML = `<div style="text-align:center;padding:60px;color:var(--muted)">
+          <div style="font-size:48px;margin-bottom:12px">🧾</div>
+          <p>No FIR cases yet</p>
+          ${user.role==='victim' ? '<button class="btn btn-primary" style="margin-top:16px" onclick="openAddFIR()">+ Create FIR Case</button>' : ''}
+        </div>`;
+        return;
+      }
+
+      document.getElementById('fir-container').innerHTML = firs.map(fir => {
+        const linked = evidence.filter(e => e.fir === fir.id);
+        const verified = linked.filter(e => e.status === 'verified').length;
+        const myApproved = linked.filter(e => hasAccess(e.id));
+
+        return `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                <span style="font-size:20px">🧾</span>
+                <span style="font-weight:700;font-size:17px">${fir.id}</span>
+                <span class="badge badge-green">${fir.status}</span>
+              </div>
+              <div style="font-size:15px;font-weight:600;margin-bottom:4px">${fir.title}</div>
+              <div style="color:var(--muted);font-size:13px">📍 ${fir.station} &nbsp;·&nbsp; 📅 ${fir.date}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:28px;font-weight:700">${linked.length}</div>
+              <div style="color:var(--muted);font-size:12px">Evidence Files</div>
+            </div>
+          </div>
+
+          <p style="color:var(--muted);font-size:13px;margin-bottom:14px">${fir.desc}</p>
+
+          <!-- Evidence linked -->
+          ${linked.length ? `
+          <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:14px">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">
+              Linked Evidence — ${verified}/${linked.length} verified
+              ${user.role !== 'victim' ? ` · ${myApproved.length} accessible to you` : ''}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              ${linked.map(e => {
+                const accessible = hasAccess(e.id);
+                return `<div style="background:var(--surface);border:1px solid ${accessible?'var(--border)':'rgba(239,68,68,0.3)'};border-radius:6px;padding:6px 10px;font-size:12px;display:flex;align-items:center;gap:6px">
+                  ${fileIcon(e.type)} ${e.name}
+                  ${accessible
+                    ? `<span class="badge ${e.status==='verified'?'badge-green':'badge-red'}" style="font-size:10px">${e.status==='verified'?'✅':'⚠️'}</span>`
+                    : `<span style="font-size:10px;color:#ef4444">🔒</span>`}
+                </div>`;
+              }).join('')}
+            </div>
+            <div class="progress-bar" style="margin-top:10px">
+              <div class="progress-fill" style="width:${linked.length?(verified/linked.length*100):0}%"></div>
+            </div>
+          </div>` : `<div style="color:var(--muted);font-size:13px;margin-bottom:14px">No evidence linked to this FIR yet</div>`}
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${user.role==='victim' ? `<a href="upload.html" class="btn btn-primary btn-sm">📤 Add Evidence</a>` : ''}
+            ${user.role!=='victim' && linked.length ? `<a href="evidence.html" class="btn btn-primary btn-sm">🔑 Request Evidence Access</a>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="toast('📋 FIR report generated','success')">📋 Generate Report</button>
+            <button class="btn btn-ghost btn-sm" onclick="copyFIRLink('${fir.id}')">🔗 Share</button>
+            ${user.role==='victim' ? `<button class="btn btn-danger btn-sm" onclick="deleteFIR('${fir.id}')">🗑 Delete</button>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function openAddFIR() {
+      document.getElementById('new-fir-date').value = new Date().toISOString().split('T')[0];
+      document.getElementById('fir-modal').classList.add('open');
+    }
+
+    function saveFIR() {
+      const num = document.getElementById('new-fir-num').value.trim();
+      const title = document.getElementById('new-fir-title').value.trim();
+      if (!num || !title) { toast('FIR number and title required', 'error'); return; }
+      const firs = getFIRs();
+      firs.unshift({ id:num, title, station:document.getElementById('new-fir-station').value.trim()||'Unknown', date:document.getElementById('new-fir-date').value, desc:document.getElementById('new-fir-desc').value.trim(), status:'active' });
+      saveFIRs(firs);
+      addAuditLog('fir_create', `Created FIR case ${num}`);
+      document.getElementById('fir-modal').classList.remove('open');
+      toast('FIR case created!', 'success');
+      render();
+    }
+
+    function deleteFIR(id) {
+      if (!confirm('Delete this FIR case?')) return;
+      saveFIRs(getFIRs().filter(f => f.id !== id));
+      toast('FIR deleted', 'info');
+      render();
+    }
+
+    function copyFIRLink(id) {
+      navigator.clipboard?.writeText(`${window.location.origin}/fir/${id}`).catch(()=>{});
+      toast('🔗 FIR link copied', 'success');
+    }
+
+    render();
+  </script>
+</body>
+</html>

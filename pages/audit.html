@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audit Logs – LockBox</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div id="sidebar-mount"></div>
+  <div class="main">
+    <div id="topbar-mount"></div>
+    <div class="content">
+
+      <!-- Filters -->
+      <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+        <input class="form-input" id="search" placeholder="🔍 Search logs..." style="max-width:220px" oninput="render()" />
+        <select class="form-select" id="filter-action" style="max-width:160px" onchange="render()">
+          <option value="">All Actions</option>
+          <option value="upload">📤 Upload</option>
+          <option value="view">👁 View</option>
+          <option value="download">⬇ Download</option>
+          <option value="verify">✔ Verify</option>
+          <option value="share">🔗 Share</option>
+          <option value="access">🔒 Access</option>
+          <option value="login">🔓 Login</option>
+          <option value="tamper">⚠️ Tamper</option>
+        </select>
+        <select class="form-select" id="filter-role" style="max-width:140px" onchange="render()">
+          <option value="">All Roles</option>
+          <option value="victim">Victim</option>
+          <option value="police">Police</option>
+          <option value="lawyer">Lawyer</option>
+          <option value="court">Court</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="exportLogs()">📥 Export CSV</button>
+        <span style="font-size:12px;color:var(--muted);margin-left:4px">🔒 Immutable — no logs can be deleted</span>
+        <div id="log-count" style="margin-left:auto;color:var(--muted);font-size:13px"></div>
+      </div>
+
+      <!-- Stats row -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px" id="stats-row"></div>
+
+      <!-- Timeline -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px">
+        <div id="timeline"></div>
+      </div>
+
+    </div>
+  </div>
+  <div id="toast-container" class="toast-container"></div>
+  <script src="../js/app.js"></script>
+  <script>
+    requireAuth();
+    document.getElementById('sidebar-mount').innerHTML = sidebarHTML('audit');
+    document.getElementById('topbar-mount').innerHTML = topbarHTML('Audit Logs', 'Complete tamper-proof activity trail');
+    renderUserBadge();
+
+    const actionMeta = {
+      upload:   { icon: '📤', label: 'Upload',   dot: 'upload' },
+      view:     { icon: '👁️', label: 'View',     dot: 'view' },
+      download: { icon: '⬇️', label: 'Download', dot: 'download' },
+      verify:   { icon: '✔️', label: 'Verify',   dot: 'upload' },
+      share:    { icon: '🔗', label: 'Share',    dot: 'access' },
+      access:   { icon: '🔒', label: 'Access',   dot: 'access' },
+      login:    { icon: '🔓', label: 'Login',    dot: 'view' },
+      tamper:   { icon: '⚠️', label: 'Tamper',   dot: 'download' },
+      fir_create: { icon: '🧾', label: 'FIR',    dot: 'upload' }
+    };
+
+    function renderStats() {
+      const logs = getAuditLogs();
+      const counts = {};
+      logs.forEach(l => { counts[l.action] = (counts[l.action] || 0) + 1; });
+      const items = [
+        { label: 'Total Events', val: logs.length, icon: '📊' },
+        { label: 'Uploads', val: counts.upload || 0, icon: '📤' },
+        { label: 'Views', val: counts.view || 0, icon: '👁️' },
+        { label: 'Downloads', val: counts.download || 0, icon: '⬇️' },
+        { label: 'Tamper Alerts', val: counts.tamper || 0, icon: '⚠️' }
+      ];
+      document.getElementById('stats-row').innerHTML = items.map(i => `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">${i.icon}</span>
+          <div>
+            <div style="font-size:20px;font-weight:700">${i.val}</div>
+            <div style="color:var(--muted);font-size:12px">${i.label}</div>
+          </div>
+        </div>`).join('');
+    }
+
+    function render() {
+      let logs = getAuditLogs();
+      const q = document.getElementById('search').value.toLowerCase();
+      const actionF = document.getElementById('filter-action').value;
+      const roleF = document.getElementById('filter-role').value;
+
+      if (q) logs = logs.filter(l => l.detail.toLowerCase().includes(q) || l.user.toLowerCase().includes(q));
+      if (actionF) logs = logs.filter(l => l.action === actionF);
+      if (roleF) logs = logs.filter(l => l.role === roleF);
+
+      document.getElementById('log-count').textContent = `${logs.length} events`;
+
+      if (!logs.length) {
+        document.getElementById('timeline').innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">No logs found</div>`;
+        return;
+      }
+
+      // Group by date
+      const groups = {};
+      logs.forEach(l => {
+        const d = new Date(l.time).toLocaleDateString('en-IN', { dateStyle: 'full' });
+        if (!groups[d]) groups[d] = [];
+        groups[d].push(l);
+      });
+
+      document.getElementById('timeline').innerHTML = Object.entries(groups).map(([date, items]) => `
+        <div style="margin-bottom:20px">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+            📅 ${date}
+          </div>
+          <div class="audit-timeline">
+            ${items.map(l => {
+              const meta = actionMeta[l.action] || { icon: '📌', dot: 'view' };
+              return `
+              <div class="audit-item">
+                <div class="audit-dot ${meta.dot}"></div>
+                <div style="flex:1">
+                  <div class="audit-text">
+                    <span style="font-size:14px">${meta.icon}</span>
+                    <strong>${l.detail}</strong>
+                  </div>
+                  <div class="audit-time">
+                    ${new Date(l.time).toLocaleTimeString('en-IN')} ·
+                    <span class="role-${l.role}">${l.role}</span> ·
+                    ${l.user}
+                  </div>
+                </div>
+                <span class="badge badge-blue" style="font-size:10px">${meta.label}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`).join('');
+    }
+
+    function exportLogs() {
+      const logs = getAuditLogs();
+      const csv = ['Time,Action,Detail,User,Role']
+        .concat(logs.map(l => `"${l.time}","${l.action}","${l.detail}","${l.user}","${l.role}"`))
+        .join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `audit_log_${Date.now()}.csv`;
+      a.click();
+      toast('Audit log exported', 'success');
+    }
+
+    renderStats();
+    render();
+  </script>
+</body>
+</html>
