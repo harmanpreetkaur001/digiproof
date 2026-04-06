@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Duplicate Detection — Evidence Lockbox</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="sidebar-mount"></div>
+<div class="app-layout">
+  <div class="main-content">
+    <div id="topbar-mount"></div>
+    <main class="page-content">
+      <div style="max-width:760px;margin:0 auto;">
+
+        <!-- Header -->
+        <div class="card mb" style="background:linear-gradient(135deg,#1a3a6b,#2563b0);border-color:rgba(26,58,107,.3);margin-bottom:24px;">
+          <div class="flex-between">
+            <div>
+              <h2 style="font-size:20px;font-weight:700;margin-bottom:4px;color:#fff;">🤖 AI Duplicate Evidence Detection</h2>
+              <p style="color:rgba(255,255,255,.75);font-size:13px;">Upload a file to check if identical evidence was previously submitted by anyone</p>
+            </div>
+            <div style="font-size:48px;">🔍</div>
+          </div>
+        </div>
+
+        <!-- Drop Zone -->
+        <div class="card mb" id="detect-card" style="margin-bottom:20px;">
+          <h3 style="font-weight:700;margin-bottom:16px;">Select File to Check</h3>
+          <div class="upload-zone" id="drop-zone"
+            onclick="document.getElementById('detect-input').click()"
+            ondragover="event.preventDefault();this.classList.add('drag-over')"
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="handleDrop(event)">
+            <input type="file" id="detect-input" hidden onchange="handleFile(this.files[0])">
+            <div id="drop-content">
+              <div style="font-size:48px;margin-bottom:12px;">🔍</div>
+              <h3>Drag &amp; Drop file here to check</h3>
+              <p>or click to browse • Any file type supported</p>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:16px;">
+            <button class="btn btn-primary" id="check-btn" onclick="runDetection()" disabled>🤖 Run AI Detection</button>
+            <button class="btn btn-ghost" onclick="resetDetection()">Reset</button>
+          </div>
+        </div>
+
+        <!-- Result Panel -->
+        <div id="result-panel" style="display:none;">
+
+          <!-- Hash Info -->
+          <div class="card mb" style="margin-bottom:16px;">
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">SHA-256 HASH OF SUBMITTED FILE</div>
+            <div class="hash-text" id="computed-hash" style="word-break:break-all;"></div>
+          </div>
+
+          <!-- Verdict -->
+          <div class="card mb" id="verdict-card" style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div id="verdict-icon" style="font-size:48px;"></div>
+              <div>
+                <h3 id="verdict-title" style="font-size:18px;font-weight:800;margin-bottom:4px;"></h3>
+                <p id="verdict-msg" style="font-size:13px;color:var(--text-secondary);"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Matches Table -->
+          <div class="card" id="matches-section" style="display:none;">
+            <h3 style="font-weight:700;margin-bottom:14px;">🔗 Matching Evidence Records</h3>
+            <div class="table-wrap" id="matches-table"></div>
+          </div>
+
+        </div>
+
+        <!-- All Evidence Hashes Reference -->
+        <div class="card" style="margin-top:20px;">
+          <div class="flex-between mb-4">
+            <h3 style="font-weight:700;">📋 Evidence Hash Registry</h3>
+            <span id="hash-count" class="badge badge-open"></span>
+          </div>
+          <div id="hash-registry">
+            <p class="text-muted text-sm text-center" style="padding:20px;">No evidence in database yet.</p>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+  if(!requireAuth()) throw '';
+  renderSidebar('ai-detection.html');
+  renderTopbar('AI Duplicate Detection');
+
+  let selectedFile = null;
+
+  function handleDrop(e){
+    e.preventDefault();
+    document.getElementById('drop-zone').classList.remove('drag-over');
+    handleFile(e.dataTransfer.files[0]);
+  }
+
+  function handleFile(f){
+    if(!f) return;
+    selectedFile = f;
+    document.getElementById('drop-content').innerHTML = `
+      <div style="font-size:48px;margin-bottom:8px;">${fileIcon(f.type)}</div>
+      <h3>${f.name}</h3>
+      <p>${fmtSize(f.size)} • ${f.type||'Unknown type'}</p>
+      <button class="btn btn-ghost btn-sm" style="margin-top:12px;" onclick="event.stopPropagation();resetDetection()">Remove</button>`;
+    document.getElementById('check-btn').disabled = false;
+    document.getElementById('result-panel').style.display = 'none';
+  }
+
+  async function runDetection(){
+    if(!selectedFile) return;
+    const btn = document.getElementById('check-btn');
+    btn.disabled = true; btn.textContent = '⏳ Analyzing...';
+
+    const buf = await selectedFile.arrayBuffer();
+    const hash = await sha256(buf);
+
+    document.getElementById('computed-hash').textContent = hash;
+
+    // Find all matches in DB
+    const matches = DB.evidence.filter(ev => ev.hash === hash);
+
+    const resultPanel = document.getElementById('result-panel');
+    resultPanel.style.display = 'block';
+
+    const verdictCard = document.getElementById('verdict-card');
+    const icon = document.getElementById('verdict-icon');
+    const title = document.getElementById('verdict-title');
+    const msg = document.getElementById('verdict-msg');
+    const matchSec = document.getElementById('matches-section');
+
+    if(matches.length === 0){
+      verdictCard.style.background = 'rgba(13,122,78,.05)';
+      verdictCard.style.borderColor = 'rgba(13,122,78,.3)';
+      icon.textContent = '✅';
+      title.textContent = 'No Duplicate Found';
+      title.style.color = 'var(--success)';
+      msg.textContent = `This file has a unique hash and has not been submitted before. It is safe to register as new evidence.`;
+      matchSec.style.display = 'none';
+    } else {
+      verdictCard.style.background = 'rgba(192,57,43,.05)';
+      verdictCard.style.borderColor = 'rgba(192,57,43,.3)';
+      icon.textContent = '⚠️';
+      title.textContent = `Duplicate Detected — ${matches.length} Match${matches.length>1?'es':''}`;
+      title.style.color = 'var(--danger)';
+      msg.textContent = `Identical evidence was previously submitted. Review the matching records below before proceeding.`;
+      matchSec.style.display = 'block';
+
+      document.getElementById('matches-table').innerHTML =
+        `<table><thead><tr><th>File Name</th><th>Submitted By</th><th>FIR</th><th>Category</th><th>Date</th><th>Hash</th></tr></thead><tbody>` +
+        matches.map(ev => `<tr>
+          <td style="font-weight:600;">${fileIcon(ev.fileType)} ${ev.originalName}</td>
+          <td>${ev.uploadedBy}</td>
+          <td style="color:var(--warning);">${ev.firNumber||'—'}</td>
+          <td>${ev.category}</td>
+          <td style="color:var(--text-secondary);">${fmtDate(ev.uploadedAt)}</td>
+          <td><span class="hash-text">${truncHash(ev.hash)}</span></td>
+        </tr>`).join('') +
+        `</tbody></table>`;
+    }
+
+    // Log the detection action
+    addAudit('verify', matches[0]?.id||'', selectedFile.name, `AI duplicate check: ${matches.length} match(es) found`);
+
+    btn.disabled = false; btn.textContent = '🤖 Run AI Detection';
+    renderHashRegistry();
+  }
+
+  function resetDetection(){
+    selectedFile = null;
+    document.getElementById('detect-input').value = '';
+    document.getElementById('drop-content').innerHTML = `
+      <div style="font-size:48px;margin-bottom:12px;">🔍</div>
+      <h3>Drag &amp; Drop file here to check</h3>
+      <p>or click to browse • Any file type supported</p>`;
+    document.getElementById('check-btn').disabled = true;
+    document.getElementById('result-panel').style.display = 'none';
+  }
+
+  function renderHashRegistry(){
+    const el = document.getElementById('hash-registry');
+    const count = document.getElementById('hash-count');
+    count.textContent = `${DB.evidence.length} record${DB.evidence.length!==1?'s':''}`;
+    if(!DB.evidence.length){
+      el.innerHTML = '<p class="text-muted text-sm text-center" style="padding:20px;">No evidence in database yet.</p>';
+      return;
+    }
+    el.innerHTML = `<table><thead><tr><th>File</th><th>Submitted By</th><th>FIR</th><th>Date</th><th>SHA-256 Hash</th></tr></thead><tbody>` +
+      DB.evidence.map(ev => `<tr>
+        <td>${fileIcon(ev.fileType)} <span style="font-weight:600;">${ev.originalName}</span></td>
+        <td>${ev.uploadedBy}</td>
+        <td style="color:var(--warning);">${ev.firNumber||'—'}</td>
+        <td style="color:var(--text-secondary);">${fmtDate(ev.uploadedAt)}</td>
+        <td><span class="hash-text">${truncHash(ev.hash)}</span></td>
+      </tr>`).join('') +
+      `</tbody></table>`;
+  }
+
+  renderHashRegistry();
+</script>
+</body>
+</html>
