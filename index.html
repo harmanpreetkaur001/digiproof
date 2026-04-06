@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LockBox – Digital Evidence Vault</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(79,110,247,0.12); border: 1px solid rgba(79,110,247,0.3);
+      border-radius: 20px; padding: 4px 14px; font-size: 12px;
+      color: var(--accent); margin-bottom: 16px;
+    }
+    .feat-chip {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--muted);
+    }
+    .role-desc {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px; margin-top: 12px;
+      font-size: 13px; color: var(--muted); display: none;
+    }
+    .role-desc.show { display: block; }
+    .role-desc strong { color: var(--text); display: block; margin-bottom: 4px; }
+    .role-desc ul { padding-left: 16px; margin: 0; }
+    .role-desc ul li { margin-bottom: 2px; }
+    @media (max-width: 720px) {
+      .login-grid { grid-template-columns: 1fr !important; }
+      .hero-left  { display: none !important; }
+    }
+  </style>
+</head>
+<body style="display:block">
+
+<div class="login-page">
+  <div class="login-grid" style="width:100%;max-width:980px;display:grid;grid-template-columns:1fr 420px;gap:48px;align-items:center;padding:24px">
+
+    <!-- LEFT HERO -->
+    <div class="hero-left">
+      <div class="hero-badge">🇮🇳 India Justice Tech Solution</div>
+      <h1 style="font-size:44px;font-weight:800;line-height:1.2;margin-bottom:16px">
+        Digital Evidence<br>
+        <span style="background:linear-gradient(135deg,#4f6ef7,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Lockbox</span>
+      </h1>
+      <p style="color:var(--muted);font-size:15px;line-height:1.8;margin-bottom:24px">
+        Tamper-proof digital vault for FIR evidence. Every file gets a SHA-256 hash,
+        timestamp, and device fingerprint — locked forever. Role-based access ensures
+        only approved parties can view evidence.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:28px">
+        <span class="feat-chip">🔐 SHA-256 Hashing</span>
+        <span class="feat-chip">⏱️ Immutable Timestamps</span>
+        <span class="feat-chip">👥 Role-Based Access</span>
+        <span class="feat-chip">📜 Audit Trail</span>
+        <span class="feat-chip">✅ Tamper Detection</span>
+        <span class="feat-chip">🔑 Court Approval System</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:12px">
+          <div style="font-weight:700;color:#22c55e;margin-bottom:4px">👤 Victim</div>
+          <div style="font-size:12px;color:var(--muted)">Upload evidence, manage access, create FIR cases</div>
+        </div>
+        <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px">
+          <div style="font-weight:700;color:#3b82f6;margin-bottom:4px">👮 Police</div>
+          <div style="font-size:12px;color:var(--muted)">Request court approval to view evidence, add comments</div>
+        </div>
+        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:12px">
+          <div style="font-weight:700;color:#f59e0b;margin-bottom:4px">⚖️ Lawyer</div>
+          <div style="font-size:12px;color:var(--muted)">Request court approval, download approved evidence</div>
+        </div>
+        <div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:12px">
+          <div style="font-weight:700;color:#a855f7;margin-bottom:4px">🏛️ Court</div>
+          <div style="font-size:12px;color:var(--muted)">Full authority — approve/reject requests, view & download all</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGIN CARD -->
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="big-icon">🔒</div>
+        <h1>LockBox</h1>
+        <p>Secure Evidence Management System</p>
+      </div>
+
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px;text-align:center">
+        Select your role to continue
+      </p>
+
+      <div class="role-selector">
+        <button class="role-btn selected" data-role="victim" onclick="selectRole(this)">
+          <span class="role-emoji">👤</span>Victim
+        </button>
+        <button class="role-btn" data-role="police" onclick="selectRole(this)">
+          <span class="role-emoji">👮</span>Police
+        </button>
+        <button class="role-btn" data-role="lawyer" onclick="selectRole(this)">
+          <span class="role-emoji">⚖️</span>Lawyer
+        </button>
+        <button class="role-btn" data-role="court" onclick="selectRole(this)">
+          <span class="role-emoji">🏛️</span>Court
+        </button>
+      </div>
+
+      <div class="role-desc show" id="role-desc"></div>
+
+      <div class="form-group" style="margin-top:14px">
+        <label class="form-label">Full Name</label>
+        <input class="form-input" id="inp-name" type="text" placeholder="Enter your full name" autocomplete="name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="email-label">Email Address</label>
+        <input class="form-input" id="inp-email" type="email" placeholder="Enter your email" autocomplete="email" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="inp-pass" type="password" placeholder="Enter password" autocomplete="current-password" />
+      </div>
+
+      <button class="btn btn-primary" id="btn-login"
+        style="width:100%;justify-content:center;padding:12px;font-size:14px"
+        onclick="doLogin()">
+        🔓 Enter Vault
+      </button>
+      <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:10px">
+        Demo mode — any name / email / password works
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+<script src="js/app.js"></script>
+<script>
+  if (isLoggedIn()) window.location.href = 'pages/dashboard.html';
+
+  var selectedRole = 'victim';
+
+  var ROLE_DESC = {
+    victim: { label: '👤 Victim — Evidence Owner',        perms: ['Upload and lock evidence files', 'View your own evidence (read-only)', 'Create and link FIR cases', 'View full audit trail'],        emailLabel: 'Email Address' },
+    police: { label: '👮 Police Officer — Investigator',  perms: ['Browse evidence list (names only)', 'Request court approval to view', 'Comment after court approval', 'Cannot upload or download'], emailLabel: 'Badge ID / Email' },
+    lawyer: { label: '⚖️ Advocate — Legal Counsel',       perms: ['Browse evidence list (names only)', 'Request court approval to view', 'Download after court approval', 'Cannot upload or comment'], emailLabel: 'Bar Council ID / Email' },
+    court:  { label: '🏛️ Court / Judge — Final Authority', perms: ['Full access to all evidence', 'Approve or reject all requests', 'Download and comment on files', 'Manage all access control'],    emailLabel: 'Court ID / Email' }
+  };
+
+  function selectRole(btn) {
+    document.querySelectorAll('.role-btn').forEach(function(b) { b.classList.remove('selected'); });
+    btn.classList.add('selected');
+    selectedRole = btn.dataset.role;
+    renderRoleDesc();
+  }
+
+  function renderRoleDesc() {
+    var d = ROLE_DESC[selectedRole];
+    document.getElementById('role-desc').innerHTML =
+      '<strong>' + d.label + '</strong><ul>' +
+      d.perms.map(function(p) { return '<li>' + p + '</li>'; }).join('') + '</ul>';
+    document.getElementById('email-label').textContent = d.emailLabel;
+  }
+  renderRoleDesc();
+
+  function doLogin() {
+    var name  = document.getElementById('inp-name').value.trim();
+    var email = document.getElementById('inp-email').value.trim();
+    var pass  = document.getElementById('inp-pass').value;
+
+    if (!name)  { toast('Please enter your full name', 'error'); return; }
+    if (!email) { toast('Please enter your email', 'error'); return; }
+    if (!pass)  { toast('Please enter your password', 'error'); return; }
+
+    var btn = document.getElementById('btn-login');
+    btn.textContent = '⏳ Entering...';
+    btn.disabled = true;
+
+    var user = { id: uid(), name: name, email: email, role: selectedRole };
+    store.set('lockbox_user',  user);
+    store.set('lockbox_token', uid());
+
+    seedDemoData();
+    addAuditLog('login', name + ' logged in as ' + selectedRole);
+    toast('Welcome, ' + name + '! ✅', 'success');
+
+    setTimeout(function() { window.location.href = 'pages/dashboard.html'; }, 600);
+  }
+
+  function seedDemoData() {
+    if (store.get('lockbox_evidence')) return;
+    var ids = [uid(), uid(), uid()];
+    saveEvidence([
+      { id: ids[0], name: 'Incident_Video.mp4',   type: 'video/mp4',        size: 15728640, hash: 'a3f8c2d1e4b5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1', timestamp: new Date(Date.now()-86400000).toISOString(), fir: 'FIR-2024-001', category: 'Incident 1',    status: 'verified', device: { browser:'Chrome/120',  platform:'Win32' }, locked: true },
+      { id: ids[1], name: 'Chat_Screenshot.png',  type: 'image/png',        size: 524288,   hash: 'b4e9d3c2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4', timestamp: new Date(Date.now()-43200000).toISOString(), fir: 'FIR-2024-001', category: 'Communication', status: 'verified', device: { browser:'Firefox/121', platform:'Win32' }, locked: true },
+      { id: ids[2], name: 'Medical_Report.pdf',   type: 'application/pdf',  size: 2097152,  hash: 'c5f0e4d3b2a1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5', timestamp: new Date(Date.now()-7200000).toISOString(),  fir: 'FIR-2024-002', category: 'Medical',       status: 'verified', device: { browser:'Chrome/120',  platform:'Win32' }, locked: true }
+    ]);
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doLogin();
+  });
+</script>
+</body>
+</html>
